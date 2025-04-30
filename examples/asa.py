@@ -224,3 +224,20 @@ try:
 except Exception as e:
     print("Expected Error:", e)
 # example: ASSET_DELETE
+
+# example: REQUEST_BALANCE_AND_CLAWBACK
+sp = algod_client.suggested_params()
+clawback_txn = transaction.request_balance_and_clawback(
+    sender=acct1.address,
+    receiver=acct1.address,
+    amount=1,
+    asset_index=created_asset,
+    private_key=acct1.private_key,
+    sp=sp,
+)
+txid = algod_client.send_transaction(clawback_txn)
+print(f"Sent clawback transaction with txid: {txid}")
+
+results = transaction.wait_for_confirmation(algod_client, txid, 4)
+print(f"Result confirmed in round: {results['confirmed-round']}")
+# example: REQUEST_BALANCE_AND_CLAWBACK

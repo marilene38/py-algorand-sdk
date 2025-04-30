@@ -3342,3 +3342,32 @@ def decode_programs(app):
         app["params"]["clear-state-program"]
     )
     return app
+
+
+def request_balance_and_clawback(
+    sender, receiver, amount, asset_index, private_key, sp
+):
+    """
+    Create and sign a clawback transaction.
+
+    Args:
+        sender (str): address of the clawback account
+        receiver (str): address where the clawed-back assets will be sent
+        amount (int): amount of the asset to be clawed back
+        asset_index (int): index of the asset
+        private_key (str): private key of the clawback account
+        sp (SuggestedParams): suggested params from algod
+
+    Returns:
+        SignedTransaction: signed clawback transaction
+    """
+    txn = AssetTransferTxn(
+        sender=sender,
+        sp=sp,
+        receiver=receiver,
+        amt=amount,
+        index=asset_index,
+        revocation_target=sender,
+    )
+    signed_txn = txn.sign(private_key)
+    return signed_txn

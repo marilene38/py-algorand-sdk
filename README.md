@@ -41,13 +41,27 @@ Set up the Algorand Sandbox based test-harness without running the tests
 
 * `make harness`
 
-Format code:
+Format code
 
 * `black .`
 
-Lint types:
+Update `algosdk/__init__.pyi` which allows downstream developers importing `algosdk` and using VSCode's PyLance to have improved type analysis
 
-* `mypy algosdk`
+* `make generate-init`
+
+Lint types
+
+* `make mypy` (or `mypy algosdk`)
+
+Check all lints required by the C.I. process
+
+* `make lint`
+
+Run non-test-harness related unit tests
+
+* `make pytest-unit`
+
+We use cucumber testing for all of our SDKs, including this one. Please refer to [algorand-sdk-testing](https://github.com/algorand/algorand-sdk-testing#readme) for guidance and existing tests that you may need to update. Depending on the type of update you wish to contribute, you may also need to have corresponding updates in the other SDKs (Go, JS, and Java). Feel welcome to ask for collaboration on that front. 
 
 ## Quick start
 

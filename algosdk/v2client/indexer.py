@@ -31,7 +31,7 @@ class IndexerClient:
         self.headers = headers
 
     def indexer_request(
-        self, method, requrl, params=None, data=None, headers=None
+        self, method, requrl, params=None, data=None, headers=None, timeout=30
     ):
         """
         Execute a given request.
@@ -42,6 +42,7 @@ class IndexerClient:
             params (dict, optional): parameters for the request
             data (dict, optional): data in the body of the request
             headers (dict, optional): additional header for request
+            timeout (int, optional): request timeout in seconds
 
         Returns:
             dict: loaded from json response body
@@ -70,7 +71,7 @@ class IndexerClient:
         )
 
         try:
-            resp = urlopen(req)
+            resp = urlopen(req, timeout=timeout)
         except urllib.error.HTTPError as e:
             e = e.read().decode("utf-8")
             try:
@@ -123,19 +124,26 @@ class IndexerClient:
             max_balance (int, optional): results should have an amount less
                 than this value (results with an amount equal to this value
                 are excluded)
-            block (int, optional): include results for the specified round;
-                for performance reasons, this parameter may be disabled on
-                some configurations
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
             auth_addr (str, optional): Include accounts configured to use
                 this spending key.
             application_id (int, optional): results should filter on this
                 application
-            round_num (int, optional): alias for block; only specify one of
-                these
+            round_num (int, optional): Include results for the specified round.
+                For performance reasons, this parameter may be disabled on some configurations.
+                Using application-id or asset-id filters will return both creator and opt-in accounts.
+                Filtering by include-all will return creator and opt-in accounts for deleted assets and accounts.
+                Non-opt-in managers are not included in the results when asset-id is used.
+                If specified, do not include block
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
                 to false.
+            exclude (str optional): Exclude additional items such as asset holdings,
+                application local data stored for this account,
+                asset parameters created by this account,
+                and application parameters created by this account.
         """
         req = "/accounts"
         query = dict()
@@ -145,7 +153,7 @@ class IndexerClient:
             query["limit"] = limit
         if next_page:
             query["next"] = next_page
-        if min_balance:
+        if min_balance is not None:
             query["currency-greater-than"] = min_balance
         if max_balance:
             query["currency-less-than"] = max_balance
@@ -186,11 +194,6 @@ class IndexerClient:
             max_balance (int, optional): results should have an amount less
                 than this value (results with an amount equal to this value
                 are excluded)
-            block (int, optional): include results for the specified round;
-                for performance reasons, this parameter may be disabled on
-                some configurations
-            round_num (int, optional): alias for block; only specify one of
-                these
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
@@ -202,7 +205,7 @@ class IndexerClient:
             query["limit"] = limit
         if next_page:
             query["next"] = next_page
-        if min_balance:
+        if min_balance is not None:
             query["currency-greater-than"] = min_balance
         if max_balance:
             query["currency-less-than"] = max_balance
@@ -221,8 +224,6 @@ class IndexerClient:
             round_num (int, optional): alias for block; specify one of these
             header_only (bool, optional):
         """
-        if block is None and round_num is None:
-            raise error.UnderspecifiedRoundError
         req = "/blocks/" + _specify_round_string(block, round_num)
 
         query = dict()
@@ -245,13 +246,16 @@ class IndexerClient:
 
         Args:
             address (str): account public key
-            block (int, optional): use results from the specified round
-            round_num (int, optional): alias for block; only specify one of
-                these
-            include_all (bool, optional): include all items including closed
-                accounts, deleted applications, destroyed assets, opted-out
-                asset holdings, and closed-out application localstates. Defaults
-                to false.
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
+            include_all (bool, optional): Include all items including closed accounts, deleted applications,
+                destroyed assets, opted-out asset holdings, and closed-out application localstates.
+                Defaults to false.
+            exclude (str optional): Exclude additional items such as asset holdings,
+                application local data stored for this account, asset parameters created by this account,
+                and application parameters created by this account.
         """
         req = "/accounts/" + address
         query = dict()
@@ -284,9 +288,10 @@ class IndexerClient:
                 token provided by the previous results
             asset_id (int): include transactions for the specified
                 asset
-            block (int, optional): use results from the specified round
-            round_num (int, optional): alias for block; only specify one of
-                these
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
@@ -327,9 +332,10 @@ class IndexerClient:
                 token provided by the previous results
             asset_id (int): include transactions for the specified
                 asset
-            block (int, optional): use results from the specified round
-            round_num (int, optional): alias for block; only specify one of
-                these
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
@@ -369,9 +375,10 @@ class IndexerClient:
             next_page (str, optional): the next page of results; use the next
                 token provided by the previous results
             application_id (int, optional): restrict search to application index
-            block (int, optional): use results from the specified round
-            round_num (int, optional): alias for block; only specify one of
-                these
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
@@ -411,9 +418,10 @@ class IndexerClient:
             next_page (str, optional): the next page of results; use the next
                 token provided by the previous results
             application_id (int, optional): restrict search to application index
-            block (int, optional): use results from the specified round
-            round_num (int, optional): alias for block; only specify one of
-                these
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
                 asset holdings, and closed-out application localstates. Defaults
@@ -489,9 +497,9 @@ class IndexerClient:
                 specified round
             asset_id (int, optional): include transactions for the specified
                 asset
-            end_time (str, optional): include results before the given time;
-                must be an RFC 3339 formatted string
             start_time (str, optional): include results after the given time;
+                must be an RFC 3339 formatted string
+            end_time (str, optional): include results before the given time;
                 must be an RFC 3339 formatted string
             min_amount (int, optional): results should have an amount greater
                 than this value; microalgos are the default currency unless an
@@ -541,7 +549,7 @@ class IndexerClient:
             query["before-time"] = end_time
         if start_time:
             query["after-time"] = start_time
-        if min_amount:
+        if min_amount is not None:
             query["currency-greater-than"] = min_amount
         if max_amount:
             query["currency-less-than"] = max_amount
@@ -595,16 +603,17 @@ class IndexerClient:
             sig_type (str, optional): type of signature; one of "sig", "msig",
                 "lsig"
             txid (str, optional): lookup a specific transaction by ID
-            block (int, optional): include results for the specified round
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
             min_round (int, optional): include results at or after the
                 specified round
             max_round (int, optional): include results at or before the
                 specified round
             asset_id (int, optional): include transactions for the specified
                 asset
-            end_time (str, optional): include results before the given time;
-                must be an RFC 3339 formatted string
             start_time (str, optional): include results after the given time;
+                must be an RFC 3339 formatted string
+            end_time (str, optional): include results before the given time;
                 must be an RFC 3339 formatted string
             min_amount (int, optional): results should have an amount greater
                 than this value; microalgos are the default currency unless an
@@ -614,8 +623,8 @@ class IndexerClient:
                 asset-id is provided, in which case the asset will be used
             rekey_to (bool, optional): include results which include the
                 rekey-to field
-            round_num (int, optional): alias for block; only specify one of
-                these
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
         """
         req = "/accounts/" + address + "/transactions"
         query = dict()
@@ -642,7 +651,7 @@ class IndexerClient:
             query["before-time"] = end_time
         if start_time:
             query["after-time"] = start_time
-        if min_amount:
+        if min_amount is not None:
             query["currency-greater-than"] = min_amount
         if max_amount:
             query["currency-less-than"] = max_amount
@@ -690,16 +699,17 @@ class IndexerClient:
             sig_type (str, optional): type of signature; one of "sig", "msig",
                 "lsig"
             txid (str, optional): lookup a specific transaction by ID
-            block (int, optional): include results for the specified round
+            block (int, optional): this is a synonym for round_num. Do not
+                include both.
             min_round (int, optional): include results at or after the
                 specified round
             max_round (int, optional): include results at or before the
                 specified round
             address (str, optional): only include transactions with this
                 address in one of the transaction fields
-            end_time (str, optional): include results before the given time;
-                must be an RFC 3339 formatted string
             start_time (str, optional): include results after the given time;
+                must be an RFC 3339 formatted string
+            end_time (str, optional): include results before the given time;
                 must be an RFC 3339 formatted string
             min_amount (int, optional): results should have an amount greater
                 than this value; microalgos are the default currency unless an
@@ -717,8 +727,8 @@ class IndexerClient:
                 to true
             rekey_to (bool, optional): include results which include the
                 rekey-to field
-            round_num (int, optional): alias for block; only specify one of
-                these
+            round_num (int, optional): Include results for the specified round.
+                If specified, do not include block
         """
         req = "/assets/" + str(asset_id) + "/transactions"
         query = dict()
@@ -743,7 +753,7 @@ class IndexerClient:
             query["before-time"] = end_time
         if start_time:
             query["after-time"] = start_time
-        if min_amount:
+        if min_amount is not None:
             query["currency-greater-than"] = min_amount
         if max_amount:
             query["currency-less-than"] = max_amount
@@ -866,9 +876,11 @@ class IndexerClient:
 
         Args:
             application_id (int, optional): restrict search to application index
+            creator (str, optional): filter just assets with the given creator
+                address
             round (int, optional): not supported, DO NOT USE!
             limit (int, optional): restrict number of results to limit
-            next_page (string, optional): used for pagination
+            next_page (str, optional): used for pagination
             round_num (int, optional): not supported, DO NOT USE!
             include_all (bool, optional): include all items including closed
                 accounts, deleted applications, destroyed assets, opted-out
@@ -910,9 +922,9 @@ class IndexerClient:
             limit (int, optional): limit maximum number of results to return
             min_round (int, optional): only include results at or after the specified round
             max_round (int, optional): only include results at or before the specified round
-            next_page (string, optional): used for pagination
-            sender_addr (string, optional): only include transactions with this sender address
-            txid (string, optional): only include results with this transaction ID
+            next_page (str, optional): used for pagination
+            sender_addr (str, optional): only include transactions with this sender address
+            txid (str, optional): only include results with this transaction ID
         """
         req = "/applications/{}/logs".format(application_id)
         query = dict()
@@ -962,7 +974,7 @@ class IndexerClient:
             application_id (int): The ID of the application to look up.
             limit (int, optional): Max number of box names to return.
                 If max is not set, or max == 0, returns all box-names up to queried indexer's `defaultBoxesLimit`.
-            next_page (string, optional): used for pagination
+            next_page (str, optional): used for pagination
         """
         req = "/applications/" + str(application_id) + "/boxes"
         params = {}
@@ -986,7 +998,7 @@ def _specify_round(query, block, round_num):
     """
 
     if block is not None and round_num is not None:
-        raise error.OverspecifiedRoundError
+        raise error.OverspecifiedRoundError()
     elif block is not None:
         if block:
             query["round"] = block

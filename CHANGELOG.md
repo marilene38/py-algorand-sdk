@@ -1,5 +1,113 @@
 # Changelog
 
+# v2.5.0
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.5.0 -->
+
+## What's Changed
+### Enhancements
+* api: Sync client object. by @winder in https://github.com/algorand/py-algorand-sdk/pull/514
+
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.4.0...v2.5.0
+
+# v2.4.0
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.4.0 -->
+
+## What's Changed
+### Bugfixes
+* bug-fix: include currency-greater-than param for 0 value by @shiqizng in https://github.com/algorand/py-algorand-sdk/pull/508
+### New Features
+* Simulation: Execution trace (PC/Stack/Scratch) support by @ahangsu in https://github.com/algorand/py-algorand-sdk/pull/505
+### Enhancements
+* other: Ignore formatting commits in git blame by @algochoi in https://github.com/algorand/py-algorand-sdk/pull/485
+
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.3.0...v2.4.0
+
+# v2.3.0
+
+## New Features
+
+- Algod: Simulation run with extra budget per transaction group by ahangsu in #484
+
+## Enhancement
+
+- tweak: reorder GenericSignedTransaction type alias by tzaffi in #478
+- Enhancement: Adding `box_reference.py` to Read The Docs by tzaffi in #481
+- DevOps: Update CODEOWNERS to only refer to the devops group by onetechnical in #482
+- algod: State delta endpoints by algochoi in #483
+- CICD: Release PR Creation Workflow and Slack Messaging by algobarb in #497
+- algod: Add msgpack query param to deltas endpoints by Eric-Warehime in #499
+
+## Bug Fixes
+
+- bugfix: incorrect indexer docs by tzaffi in #476
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.2.0...v2.3.0
+
+# v2.2.0
+
+## What's Changed
+Supports new devmode block timestamp offset endpoints.
+### Bugfixes
+* Fix: improve SignedTransaction type signature for dryrun and send_transaction by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/457
+* Fix: add auth addr for multisig sign when the msig has been rekeyed by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/460
+### New Features
+* Simulation: Lift log limits option in SimulateRequest by @ahangsu in https://github.com/algorand/py-algorand-sdk/pull/469
+### Enhancements
+* Docs: Examples by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/454
+* BugFix: ATC error message improvement by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/463
+* API: Support updated simulate endpoint by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/466
+* algod: Add endpoints for devmode timestamps, sync, and ready by @algochoi in https://github.com/algorand/py-algorand-sdk/pull/468
+* DevOps: Add CODEOWNERS to restrict workflow editing by @onetechnical in https://github.com/algorand/py-algorand-sdk/pull/473
+
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.1.2...v2.2.0
+
+# v2.1.2
+
+## What's Changed
+
+This release adds a fix to allow disambiguation of transaction finality in the case of a decoding error.
+
+### Bugfixes
+* ATC: Refactor Pending Transaction Information in ATC into try block by @algochoi in https://github.com/algorand/py-algorand-sdk/pull/451
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.1.1...v2.1.2
+
+# v2.1.1
+
+## What's Changed
+### Bugfixes
+* Fix: Minor fix for `exclude` argument in `account_info` by @ahangsu in https://github.com/algorand/py-algorand-sdk/pull/449
+### Enhancements
+* Documentation: Adding examples to be pulled in to docs by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/441
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.1.0...v2.1.1
+
+# v2.1.0
+
+## What's Changed
+### Bugfixes
+* bugfix: fix msig sks type + a couple other mypy complaints by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/434
+* fix: remove unused positional argument "contract_type" from OverspecifiedRoundError and UnderspecifiedRoundError by @ori-shem-tov in https://github.com/algorand/py-algorand-sdk/pull/438
+* Fix: Revert .test-env in develop by @bbroder-algo in https://github.com/algorand/py-algorand-sdk/pull/445
+### New Features
+* New Feature: Adding methods to use the simulate endpoint by @barnjamin in https://github.com/algorand/py-algorand-sdk/pull/420
+### Enhancements
+* Infrastructure: Add setup.py check to circle ci by @algochoi in https://github.com/algorand/py-algorand-sdk/pull/427
+* Enhancement: Type Friendly Exports by @tzaffi in https://github.com/algorand/py-algorand-sdk/pull/435
+* Algod: Add disassembly endpoint and implement cucumber test by @algochoi in https://github.com/algorand/py-algorand-sdk/pull/440
+* Enhancement: Upgrade black, mypy, and add type annotations to algod.py by @tzaffi in https://github.com/algorand/py-algorand-sdk/pull/442
+
+## New Contributors
+* @ori-shem-tov made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/438
+* @bbroder-algo made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/445
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.0.0...v2.0.1
+
 # v2.0.0
 
 ## What's Changed

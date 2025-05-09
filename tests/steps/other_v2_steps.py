@@ -19,6 +19,10 @@ from algosdk import (
     source_map,
     transaction,
 )
+
+from algosdk.atomic_transaction_composer import (
+    SimulateAtomicTransactionResponse,
+)
 from algosdk.error import AlgodHTTPError
 from algosdk.testing.dryrun import DryrunTestCaseMixin
 from algosdk.v2client import *
@@ -27,6 +31,8 @@ from algosdk.v2client.models import (
     ApplicationLocalState,
     DryrunRequest,
     DryrunSource,
+    SimulateRequest,
+    SimulateTraceConfig,
 )
 from tests.steps.steps import algod_port, indexer_port
 from tests.steps.steps import token as daemon_token
@@ -896,8 +902,14 @@ def expect_path(context, path):
         context.response["path"]
     )
     actual_query = urllib.parse.parse_qs(actual_query)
-    assert exp_path == actual_path.replace("%3A", ":")
-    assert exp_query == actual_query
+    actual_path = actual_path.replace("%3A", ":")
+    assert exp_path == actual_path, f"{exp_path} != {actual_path}"
+    assert exp_query == actual_query, f"{exp_query} != {actual_query}"
+
+
+@then('expect the request to be "{method}" "{path}"')
+def expect_request(context, method, path):
+    return expect_path(context, path)
 
 
 @then('expect error string to contain "{err:MaybeString}"')
@@ -1070,6 +1082,17 @@ def b64decode_compiled_teal_step(context, binary):
     binary = load_resource(binary)
     response_result = context.response["result"]
     assert base64.b64decode(response_result.encode()) == binary
+
+
+@then('disassembly of "{bytecode_filename}" matches "{source_filename}"')
+def disassembly_matches_source(context, bytecode_filename, source_filename):
+    bytecode = load_resource(bytecode_filename)
+    expected_source = load_resource(source_filename).decode("utf-8")
+
+    context.response = context.app_acl.disassemble(bytecode)
+    actual_source = context.response["result"]
+
+    assert actual_source == expected_source
 
 
 @when('I dryrun a "{kind}" program "{program}"')
@@ -1362,7 +1385,6 @@ def check_source_map(context, pc_to_line):
 
 @then('getting the line associated with a pc "{pc}" equals "{line}"')
 def check_pc_to_line(context, pc, line):
-
     actual_line = context.source_map.get_line_for_pc(int(pc))
     assert actual_line == int(line), f"expected line {line} got {actual_line}"
 
@@ -1414,3 +1436,265 @@ def transaction_proof(context, round, txid, hashtype):
 @when("we make a Lookup Block Hash call against round {round}")
 def get_block_hash(context, round):
     context.response = context.acl.get_block_hash(round)
+
+
+@when("I simulate the transaction")
+def simulate_transaction(context):
+    context.simulate_response = context.app_acl.simulate_raw_transactions(
+        [context.stx]
+    )
+
+
+@then("the simulation should succeed without any failure message")
+def simulate_transaction_succeed(context):
+    resp = (
+        context.simulate_response
+        if hasattr(context, "simulate_response")
+        else context.atomic_transaction_composer_return.simulate_response
+    )
+
+    for group in resp["txn-groups"]:
+        assert "failure-message" not in group
+
+
+@then("I simulate the current transaction group with the composer")
+def simulate_atc(context):
+    context.atomic_transaction_composer_return = (
+        context.atomic_transaction_composer.simulate(context.app_acl)
+    )
+
+
+@then(
+    'the simulation should report a failure at group "{group}", path "{path}" with message "{message}"'
+)
+def simulate_atc_failure(context, group, path, message):
+    if hasattr(context, "simulate_response"):
+        resp = context.simulate_response
+    else:
+        resp = context.atomic_transaction_composer_return.simulate_response
+    group_idx: int = int(group)
+    fail_path = ",".join(
+        [str(pe) for pe in resp["txn-groups"][group_idx]["failed-at"]]
+    )
+    assert fail_path == path
+    assert message in resp["txn-groups"][group_idx]["failure-message"]
+
+
+@when("I make a new simulate request.")
+def make_simulate_request(context):
+    context.simulate_request = SimulateRequest(txn_groups=[])
+
+
+@then("I allow more logs on that simulate request.")
+def allow_more_logs_in_request(context):
+    context.simulate_request.allow_more_logs = True
+
+
+@then("I simulate the transaction group with the simulate request.")
+def simulate_group_with_request(context):
+    context.atomic_transaction_composer_return = (
+        context.atomic_transaction_composer.simulate(
+            context.app_acl, context.simulate_request
+        )
+    )
+
+
+@then("I check the simulation result has power packs allow-more-logging.")
+def power_pack_simulation_should_have_more_logging(context):
+    assert context.atomic_transaction_composer_return.eval_overrides
+    assert (
+        context.atomic_transaction_composer_return.eval_overrides.max_log_calls
+    )
+    assert (
+        context.atomic_transaction_composer_return.eval_overrides.max_log_size
+    )
+
+
+@when("I prepare the transaction without signatures for simulation")
+def prepare_txn_without_signatures(context):
+    context.stx = transaction.SignedTransaction(context.txn, None)
+
+
+@then("I allow {budget} more budget on that simulate request.")
+def allow_more_budget_simulation(context, budget):
+    context.simulate_request.extra_opcode_budget = int(budget)
+
+
+@then(
+    "I check the simulation result has power packs extra-opcode-budget with extra budget {budget}."
+)
+def power_pack_simulation_should_have_extra_budget(context, budget):
+    assert context.atomic_transaction_composer_return.eval_overrides
+    assert (
+        context.atomic_transaction_composer_return.eval_overrides.extra_opcode_budget
+        == int(budget)
+    )
+
+
+@then(
+    'I allow exec trace options "{options:MaybeString}" on that simulate request.'
+)
+def exec_trace_config_in_simulation(context, options: str):
+    option_list = options.split(",")
+    context.simulate_request.exec_trace_config = SimulateTraceConfig(
+        enable=True,
+        stack_change="stack" in option_list,
+        scratch_change="scratch" in option_list,
+    )
+
+
+@then(
+    '{unit_index}th unit in the "{trace_type}" trace at txn-groups path "{group_path}" should add value "{stack_addition:MaybeString}" to stack, pop {pop_count} values from stack, write value "{scratch_var:MaybeString}" to scratch slot "{scratch_index:MaybeString}".'
+)
+def exec_trace_unit_in_simulation_check_stack_scratch(
+    context,
+    unit_index,
+    trace_type,
+    group_path,
+    stack_addition: str,
+    pop_count,
+    scratch_var,
+    scratch_index,
+):
+    assert context.atomic_transaction_composer_return
+    assert context.atomic_transaction_composer_return.simulate_response
+
+    simulation_response = (
+        context.atomic_transaction_composer_return.simulate_response
+    )
+    assert "txn-groups" in simulation_response
+
+    assert simulation_response["txn-groups"]
+
+    group_path = list(map(int, group_path.split(",")))
+    traces = simulation_response["txn-groups"][0]["txn-results"][
+        group_path[0]
+    ]["exec-trace"]
+    assert traces
+
+    for i in range(1, len(group_path)):
+        traces = traces["inner-trace"][group_path[i]]
+        assert traces
+
+    trace = []
+    if trace_type == "approval":
+        trace = traces["approval-program-trace"]
+    elif trace_type == "clearState":
+        trace = traces["clear-state-program-trace"]
+    elif trace_type == "logic":
+        trace = traces["logic-sig-trace"]
+
+    assert trace
+
+    unit_index = int(unit_index)
+    unit = trace[unit_index]
+
+    def compare_avm_value_with_string_literal(string_literal, avm_value):
+        [avm_type, value] = string_literal.split(":")
+        assert avm_type in ["uint64", "bytes"]
+        assert "type" in avm_value
+        if avm_type == "uint64":
+            assert avm_value["type"] == 2
+            if int(value) > 0:
+                assert avm_value["uint"] == int(value)
+            else:
+                assert "uint" not in avm_value
+        elif avm_value == "bytes":
+            assert avm_value["type"] == 1
+            if len(value) > 0:
+                assert avm_value["bytes"] == base64.b64decode(bytearray(value))
+            else:
+                assert "bytes" not in avm_value
+
+    pop_count = int(pop_count)
+    if pop_count > 0:
+        assert unit["stack-pop-count"]
+        assert unit["stack-pop-count"] == pop_count
+    else:
+        assert "stack-pop-count" not in unit
+
+    stack_additions = list(
+        filter(lambda x: len(x) > 0, stack_addition.split(","))
+    )
+    if len(stack_additions) > 0:
+        for i in range(0, len(stack_additions)):
+            compare_avm_value_with_string_literal(
+                stack_additions[i], unit["stack-additions"][i]
+            )
+    else:
+        assert "stack-additions" not in unit
+
+    if len(scratch_index) > 0:
+        scratch_index = int(scratch_index)
+        assert unit["scratch-changes"]
+        assert len(unit["scratch-changes"]) == 1
+        assert unit["scratch-changes"][0]["slot"] == scratch_index
+        compare_avm_value_with_string_literal(
+            scratch_var, unit["scratch-changes"][0]["new-value"]
+        )
+    else:
+        assert len(scratch_var) == 0
+
+
+@when("we make a SetSyncRound call against round {round}")
+def set_sync_round_call(context, round):
+    context.response = context.acl.set_sync_round(round)
+
+
+@when("we make a GetSyncRound call")
+def get_sync_round_call(context):
+    context.response = context.acl.get_sync_round()
+
+
+@when("we make a UnsetSyncRound call")
+def unset_sync_round_call(context):
+    context.response = context.acl.unset_sync_round()
+
+
+@when("we make a Ready call")
+def ready_call(context):
+    context.response = context.acl.ready()
+
+
+@when("we make a SetBlockTimeStampOffset call against offset {offset}")
+def set_block_timestamp_offset(context, offset):
+    context.response = context.acl.set_timestamp_offset(offset)
+
+
+@when("we make a GetBlockTimeStampOffset call")
+def get_block_timestamp_offset(context):
+    context.response = context.acl.get_timestamp_offset()
+
+
+@when("we make a GetLedgerStateDelta call against round {round}")
+def get_ledger_state_delta_call(context, round):
+    context.response = context.acl.get_ledger_state_delta(
+        round, response_format="msgpack"
+    )
+
+
+@when(
+    "we make a TransactionGroupLedgerStateDeltaForRoundResponse call for round {round}"
+)
+def get_transaction_group_ledger_state_deltas_for_round(context, round):
+    context.response = (
+        context.acl.get_transaction_group_ledger_state_deltas_for_round(
+            round, response_format="msgpack"
+        )
+    )
+
+
+@when(
+    'we make a LedgerStateDeltaForTransactionGroupResponse call for ID "{id}"'
+)
+def get_ledger_state_delta_for_transaction_group(context, id):
+    context.response = (
+        context.acl.get_ledger_state_delta_for_transaction_group(
+            id, response_format="msgpack"
+        )
+    )
+
+
+@when("we make a GetBlockTxids call against block number {round}")
+def get_block_txids_call(context, round):
+    context.response = context.acl.get_block_txids(round)

@@ -328,6 +328,19 @@ def block(context, block, response_format):
     )
 
 
+@when(
+    'we make a Get Block call for round {round} with format "{response_format}" and header-only "{header_only}"'
+)
+def block(context, round, response_format, header_only):
+    bool_opt = None
+    if header_only == "true":
+        bool_opt = True
+
+    context.response = context.acl.block_info(
+        int(round), response_format=response_format, header_only=bool_opt
+    )
+
+
 @when("we make any Get Block call")
 def block_any(context):
     context.response = context.acl.block_info(3, response_format="msgpack")
@@ -337,6 +350,37 @@ def block_any(context):
 def parse_block(context, pool):
     context.response = json.loads(context.response)
     assert context.response["block"]["rwd"] == pool
+
+
+@then(
+    'the parsed Get Block response should have rewards pool "{pool}" and no certificate or payset'
+)
+def parse_block_header(context, pool):
+    context.response = json.loads(context.response)
+    assert context.response["block"]["rwd"] == pool
+    assert (
+        "cert" not in context.response
+    ), f"Key 'cert' unexpectedly found in dictionary"
+
+
+@then(
+    'the parsed Get Block response should have heartbeat address "{hb_address}"'
+)
+def parse_block_heartbeat(context, hb_address):
+    context.response = json.loads(context.response)
+
+    response_address = context.response["block"]["txns"][0]["txn"]["hb"]["a"]
+
+    # This should cover the first example, notably if this is false will fall through to check below
+    if response_address == hb_address:
+        return
+
+    # Our test environment is base 64 encoding the address when it is sent as json, we need to switch the encoding to match
+    response_address = encoding.encode_address(
+        base64.b64decode(response_address)
+    )
+
+    assert response_address == hb_address
 
 
 @when(
@@ -634,7 +678,6 @@ def parse_txns_by_addr(context, roundNum, length, idx, sender):
     'we make a Lookup Block call against round {block:d} and header "{headerOnly:MaybeBool}"'
 )
 def lookup_block(context, block, headerOnly):
-    print("Header only = " + str(headerOnly))
     context.response = context.icl.block_info(
         block=block, header_only=headerOnly
     )
@@ -811,6 +854,53 @@ def search_txns2(
     )
 
 
+@when(
+    'we make a Search For BlockHeaders call with minRound {minRound} maxRound {maxRound} limit {limit} nextToken "{next:MaybeString}" beforeTime "{beforeTime:MaybeString}" afterTime "{afterTime:MaybeString}" proposers {proposers} expired {expired} absent {absent}'
+)
+def search_block_headers(
+    context,
+    minRound,
+    maxRound,
+    limit,
+    next,
+    beforeTime,
+    afterTime,
+    proposers,
+    expired,
+    absent,
+):
+    if next == "none":
+        next = None
+    if beforeTime == "none":
+        beforeTime = None
+    if afterTime == "none":
+        afterTime = None
+    if not proposers or proposers == '""':
+        proposers = None
+    else:
+        proposers = eval(proposers)
+    if not expired or expired == '""':
+        expired = None
+    else:
+        expired = eval(expired)
+    if not absent or absent == '""':
+        absent = None
+    else:
+        absent = eval(absent)
+
+    context.response = context.icl.search_block_headers(
+        limit=int(limit),
+        next_page=next,
+        min_round=int(minRound),
+        max_round=int(maxRound),
+        start_time=afterTime,
+        end_time=beforeTime,
+        proposers=proposers,
+        expired=expired,
+        absent=absent,
+    )
+
+
 @when("we make any SearchForTransactions call")
 def search_txns_any(context):
     context.response = context.icl.search_transactions(asset_id=2)
@@ -836,6 +926,34 @@ def parsed_search_for_txns(context, roundNum, length, index, rekeyTo):
         assert (
             context.response["transactions"][int(index)]["rekey-to"] == rekeyTo
         )
+
+
+@then(
+    'the parsed SearchForTransactions response should be valid on round {roundNum} and the array should be of len {length} and the element at index {index} should have hbaddress "{hb_address}"'
+)
+def parsed_search_for_hb_txns(context, roundNum, length, index, hb_address):
+    assert context.response["current-round"] == int(roundNum)
+    assert len(context.response["transactions"]) == int(length)
+    if int(length) > 0:
+        assert (
+            context.response["transactions"][int(index)][
+                "heartbeat-transaction"
+            ]["hb-address"]
+            == hb_address
+        )
+
+
+@when("we make any SearchForBlockHeaders call")
+def search_bhs_any(context):
+    context.response = context.icl.search_block_headers()
+
+
+@then(
+    'the parsed SearchForBlockHeaders response should have a block array of len {length} and the element at index {index} should have round "{round}"'
+)
+def step_impl(context, length, index, round):
+    assert len(context.response["blocks"]) == int(length)
+    assert (context.response["blocks"][int(index)]["round"]) == int(round)
 
 
 @when(
@@ -1540,7 +1658,30 @@ def exec_trace_config_in_simulation(context, options: str):
         enable=True,
         stack_change="stack" in option_list,
         scratch_change="scratch" in option_list,
+        state_change="state" in option_list,
     )
+
+
+def compare_avm_value_with_string_literal(
+    expected_string_literal: str, actual_avm_value: dict
+):
+    [expected_avm_type, expected_value] = expected_string_literal.split(":")
+
+    if expected_avm_type == "uint64":
+        assert actual_avm_value["type"] == 2
+        if expected_value == "0":
+            assert "uint" not in actual_avm_value
+        else:
+            assert actual_avm_value["uint"] == int(expected_value)
+    elif expected_avm_type == "bytes":
+        assert actual_avm_value["type"] == 1
+        if len(expected_value) == 0:
+            assert "bytes" not in actual_avm_value
+        else:
+            # expected_value and actual bytes should both be b64 encoded
+            assert actual_avm_value["bytes"] == expected_value
+    else:
+        raise Exception(f"Unknown AVM type: {expected_avm_type}")
 
 
 @then(
@@ -1572,8 +1713,8 @@ def exec_trace_unit_in_simulation_check_stack_scratch(
     ]["exec-trace"]
     assert traces
 
-    for i in range(1, len(group_path)):
-        traces = traces["inner-trace"][group_path[i]]
+    for p in group_path[1:]:
+        traces = traces["inner-trace"][p]
         assert traces
 
     trace = []
@@ -1588,23 +1729,6 @@ def exec_trace_unit_in_simulation_check_stack_scratch(
 
     unit_index = int(unit_index)
     unit = trace[unit_index]
-
-    def compare_avm_value_with_string_literal(string_literal, avm_value):
-        [avm_type, value] = string_literal.split(":")
-        assert avm_type in ["uint64", "bytes"]
-        assert "type" in avm_value
-        if avm_type == "uint64":
-            assert avm_value["type"] == 2
-            if int(value) > 0:
-                assert avm_value["uint"] == int(value)
-            else:
-                assert "uint" not in avm_value
-        elif avm_value == "bytes":
-            assert avm_value["type"] == 1
-            if len(value) > 0:
-                assert avm_value["bytes"] == base64.b64decode(bytearray(value))
-            else:
-                assert "bytes" not in avm_value
 
     pop_count = int(pop_count)
     if pop_count > 0:
@@ -1634,6 +1758,220 @@ def exec_trace_unit_in_simulation_check_stack_scratch(
         )
     else:
         assert len(scratch_var) == 0
+
+
+@then('the current application initial "{state_type}" state should be empty.')
+def current_app_initial_state_should_be_empty(context, state_type):
+    assert context.atomic_transaction_composer_return
+    assert context.atomic_transaction_composer_return.simulate_response
+    simulation_response = (
+        context.atomic_transaction_composer_return.simulate_response
+    )
+
+    assert simulation_response["initial-states"]
+    app_initial_states = simulation_response["initial-states"][
+        "app-initial-states"
+    ]
+    assert app_initial_states
+
+    initial_app_state = None
+    found = False
+    for app_state in app_initial_states:
+        if app_state["id"] == context.current_application_id:
+            initial_app_state = app_state
+            found = True
+            break
+    assert found
+    if initial_app_state:
+        if state_type == "local":
+            assert "app-locals" not in initial_app_state
+        elif state_type == "global":
+            assert "app-globals" not in initial_app_state
+        elif state_type == "box":
+            assert "app-boxes" not in initial_app_state
+        else:
+            raise Exception(f"Unknown state type: {state_type}")
+
+
+@then(
+    'the current application initial "{state_type}" state should contain "{key_str}" with value "{value_str}".'
+)
+def current_app_initial_state_should_contain_key_value(
+    context, state_type, key_str, value_str
+):
+    assert context.atomic_transaction_composer_return
+    assert context.atomic_transaction_composer_return.simulate_response
+    simulation_response = (
+        context.atomic_transaction_composer_return.simulate_response
+    )
+
+    assert simulation_response["initial-states"]
+    app_initial_states = simulation_response["initial-states"][
+        "app-initial-states"
+    ]
+    assert app_initial_states
+
+    initial_app_state = None
+    for app_state in app_initial_states:
+        if app_state["id"] == context.current_application_id:
+            initial_app_state = app_state
+            break
+    assert initial_app_state is not None
+    kvs = None
+    if state_type == "local":
+        assert "app-locals" in initial_app_state
+        assert isinstance(initial_app_state["app-locals"], list)
+        assert len(initial_app_state["app-locals"]) == 1
+        assert "account" in initial_app_state["app-locals"][0]
+        # TODO: verify account is an algorand address
+        assert "kvs" in initial_app_state["app-locals"][0]
+        assert isinstance(initial_app_state["app-locals"][0]["kvs"], list)
+        kvs = initial_app_state["app-locals"][0]["kvs"]
+    elif state_type == "global":
+        assert "app-globals" in initial_app_state
+        assert "account" not in initial_app_state["app-globals"]
+        assert "kvs" in initial_app_state["app-globals"]
+        assert isinstance(initial_app_state["app-globals"]["kvs"], list)
+        kvs = initial_app_state["app-globals"]["kvs"]
+    elif state_type == "box":
+        assert "app-boxes" in initial_app_state
+        assert "account" not in initial_app_state["app-boxes"]
+        assert "kvs" in initial_app_state["app-boxes"]
+        assert isinstance(initial_app_state["app-boxes"]["kvs"], list)
+        kvs = initial_app_state["app-boxes"]["kvs"]
+    else:
+        raise Exception(f"Unknown state type: {state_type}")
+    assert isinstance(kvs, list)
+    assert len(kvs) > 0
+
+    actual_value = None
+    b64_key = base64.b64encode(key_str.encode()).decode()
+    for kv in kvs:
+        assert "key" in kv
+        assert "value" in kv
+        if kv["key"] == b64_key:
+            actual_value = kv["value"]
+            break
+    assert actual_value is not None
+    compare_avm_value_with_string_literal(value_str, actual_value)
+
+
+@then(
+    '{unit_index}th unit in the "{trace_type}" trace at txn-groups path "{txn_group_path}" should write to "{state_type}" state "{state_key}" with new value "{state_new_value}".'
+)
+def trace_unit_should_write_to_state_with_value(
+    context,
+    unit_index,
+    trace_type,
+    txn_group_path,
+    state_type,
+    state_key,
+    state_new_value,
+):
+    def unit_finder(
+        simulation_response: dict,
+        txn_group_path: str,
+        trace_type: str,
+        unit_index: int,
+    ) -> dict:
+        txn_group_path_split = [
+            int(p) for p in txn_group_path.split(",") if p != ""
+        ]
+        assert len(txn_group_path_split) > 0
+
+        traces = simulation_response["txn-groups"][0]["txn-results"][
+            txn_group_path_split[0]
+        ]["exec-trace"]
+        assert traces
+
+        for p in txn_group_path_split[1:]:
+            traces = traces["inner-trace"][p]
+            assert traces
+
+        trace = None
+        if trace_type == "approval":
+            trace = traces["approval-program-trace"]
+        elif trace_type == "clearState":
+            trace = traces["clear-state-program-trace"]
+        elif trace_type == "logic":
+            trace = traces["logic-sig-trace"]
+        else:
+            raise Exception(f"Unknown trace type: {trace_type}")
+
+        assert unit_index < len(trace)
+        return trace[unit_index]
+
+    assert context.atomic_transaction_composer_return
+    assert context.atomic_transaction_composer_return.simulate_response
+    simulation_response = (
+        context.atomic_transaction_composer_return.simulate_response
+    )
+
+    change_unit = unit_finder(
+        simulation_response, txn_group_path, trace_type, int(unit_index)
+    )
+    assert change_unit["state-changes"]
+    assert len(change_unit["state-changes"]) == 1
+    state_change = change_unit["state-changes"][0]
+
+    if state_type == "global":
+        assert state_change["app-state-type"] == "g"
+        assert "account" not in state_change
+    elif state_type == "local":
+        assert state_change["app-state-type"] == "l"
+        assert "account" in state_change
+        # TODO: verify account is an algorand address
+    elif state_type == "box":
+        assert state_change["app-state-type"] == "b"
+        assert "account" not in state_change
+    else:
+        raise Exception(f"Unknown state type: {state_type}")
+
+    assert state_change["operation"] == "w"
+    assert state_change["key"] == base64.b64encode(state_key.encode()).decode()
+    assert "new-value" in state_change
+    compare_avm_value_with_string_literal(
+        state_new_value, state_change["new-value"]
+    )
+
+
+@then(
+    '"{trace_type}" hash at txn-groups path "{txn_group_path}" should be "{b64_hash}".'
+)
+def program_hash_at_path_should_be(
+    context, trace_type, txn_group_path, b64_hash
+):
+    assert context.atomic_transaction_composer_return
+    assert context.atomic_transaction_composer_return.simulate_response
+    simulation_response = (
+        context.atomic_transaction_composer_return.simulate_response
+    )
+
+    txn_group_path_split = [
+        int(p) for p in txn_group_path.split(",") if p != ""
+    ]
+    assert len(txn_group_path_split) > 0
+
+    traces = simulation_response["txn-groups"][0]["txn-results"][
+        txn_group_path_split[0]
+    ]["exec-trace"]
+    assert traces
+
+    for p in txn_group_path_split[1:]:
+        traces = traces["inner-trace"][p]
+        assert traces
+
+    hash = None
+    if trace_type == "approval":
+        hash = traces["approval-program-hash"]
+    elif trace_type == "clearState":
+        hash = traces["clear-state-program-hash"]
+    elif trace_type == "logic":
+        hash = traces["logic-sig-hash"]
+    else:
+        raise Exception(f"Unknown trace type: {trace_type}")
+
+    assert hash == b64_hash
 
 
 @when("we make a SetSyncRound call against round {round}")

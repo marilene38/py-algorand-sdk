@@ -107,10 +107,13 @@ class AlgodClient:
         except urllib.error.HTTPError as e:
             code = e.code
             es = e.read().decode("utf-8")
+            m = e  # If json.loads() fails, we'll return e itself
+            j = {}
             try:
-                e = json.loads(es)["message"]
+                j = json.loads(es)
+                m = j["message"]
             finally:
-                raise error.AlgodHTTPError(e, code)
+                raise error.AlgodHTTPError(m, code, j.get("data"))
         if response_format == "json":
             try:
                 return json.load(resp)
@@ -267,6 +270,7 @@ class AlgodClient:
         block: Optional[int] = None,
         response_format: str = "json",
         round_num: Optional[int] = None,
+        header_only: Optional[bool] = None,
         **kwargs: Any,
     ) -> AlgodResponseType:
         """
@@ -277,8 +281,15 @@ class AlgodClient:
             response_format (str): the format in which the response is
                 returned: either "json" or "msgpack"
             round_num (int, optional): alias for block; specify one of these
+            header_only (bool, optional): if set to true, only block header would be
+                present in the the response
+
         """
         query = {"format": response_format}
+
+        if header_only:
+            query["header-only"] = "true"
+
         req = "/blocks/" + _specify_round_string(block, round_num)
         res = self.algod_request(
             "GET", req, query, response_format=response_format, **kwargs

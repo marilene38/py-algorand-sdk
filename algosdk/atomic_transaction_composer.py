@@ -272,11 +272,13 @@ class SimulateEvalOverrides:
         max_log_calls: Optional[int] = None,
         max_log_size: Optional[int] = None,
         allow_empty_signatures: Optional[bool] = None,
+        allow_unnamed_resources: Optional[bool] = None,
         extra_opcode_budget: Optional[int] = None,
     ) -> None:
         self.max_log_calls = max_log_calls
         self.max_log_size = max_log_size
         self.allow_empty_signatures = allow_empty_signatures
+        self.allow_unnamed_resources = allow_unnamed_resources
         self.extra_opcode_budget = extra_opcode_budget
 
     @staticmethod
@@ -296,6 +298,10 @@ class SimulateEvalOverrides:
         if "allow-empty-signatures" in eval_override_dict:
             eval_override.allow_empty_signatures = eval_override_dict[
                 "allow-empty-signatures"
+            ]
+        if "allow-unnamed-resources" in eval_override_dict:
+            eval_override.allow_unnamed_resources = eval_override_dict[
+                "allow-unnamed-resources"
             ]
         if "extra-opcode-budget" in eval_override_dict:
             eval_override.extra_opcode_budget = eval_override_dict[
@@ -673,9 +679,9 @@ class AtomicTransactionComposer:
         stxn_list: List[Optional[GenericSignedTransaction]] = [None] * len(
             self.txn_list
         )
-        signer_indexes: Dict[
-            TransactionSigner, List[int]
-        ] = {}  # Map a signer to a list of indices to sign
+        signer_indexes: Dict[TransactionSigner, List[int]] = (
+            {}
+        )  # Map a signer to a list of indices to sign
         txn_list = self.build_group()
         for i, txn_with_signer in enumerate(txn_list):
             if txn_with_signer.signer not in signer_indexes:

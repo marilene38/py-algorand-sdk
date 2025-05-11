@@ -24,6 +24,8 @@ def operation_string_to_enum(operation):
         return transaction.OnComplete.NoOpOC
     elif operation == "create":
         return transaction.OnComplete.NoOpOC
+    elif operation == "create-and-optin":
+        return transaction.OnComplete.OptInOC
     elif operation == "noop":
         return transaction.OnComplete.NoOpOC
     elif operation == "update":
@@ -359,7 +361,7 @@ def build_app_txn_with_transient(
         if (
             hasattr(context, "current_application_id")
             and context.current_application_id
-            and operation != "create"
+            and operation not in ("create", "create-and-optin")
         ):
             application_id = context.current_application_id
         operation = operation_string_to_enum(operation)
@@ -640,6 +642,7 @@ def add_nonce(context, nonce):
 
 def abi_method_adder(
     context,
+    *,
     account_type,
     operation,
     create_when_calling=False,
@@ -652,6 +655,7 @@ def abi_method_adder(
     extra_pages=None,
     force_unique_transactions=False,
     exception_key="none",
+    comma_separated_boxes_string=None,
 ):
     if account_type == "transient":
         sender = context.transient_pk
@@ -698,6 +702,10 @@ def abi_method_adder(
             + context.nonce.encode()
         )
 
+    boxes = None
+    if comma_separated_boxes_string is not None:
+        boxes = split_and_process_boxes(comma_separated_boxes_string)
+
     try:
         context.atomic_transaction_composer.add_method_call(
             app_id=app_id,
@@ -713,6 +721,7 @@ def abi_method_adder(
             clear_program=clear_program,
             extra_pages=extra_pages,
             note=note,
+            boxes=boxes,
         )
     except AtomicTransactionComposerError as atce:
         assert (
@@ -739,6 +748,18 @@ def abi_method_adder(
     ), f"should have encountered an AtomicTransactionComposerError keyed by '{exception_key}', but no such exception has been detected"
 
 
+@when(
+    'I add a method call with the transient account, the current application, suggested params, on complete "{operation}", current transaction signer, current method arguments, boxes "{boxes}".'
+)
+def add_abi_method_call_with_boxes(context, operation, boxes):
+    abi_method_adder(
+        context,
+        account_type="transient",
+        operation=operation,
+        comma_separated_boxes_string=boxes,
+    )
+
+
 @step(
     'I add a method call with the {account_type} account, the current application, suggested params, on complete "{operation}", current transaction signer, current method arguments; any resulting exception has key "{exception_key}".'
 )
@@ -747,8 +768,8 @@ def add_abi_method_call_with_exception(
 ):
     abi_method_adder(
         context,
-        account_type,
-        operation,
+        account_type=account_type,
+        operation=operation,
         exception_key=exception_key,
     )
 
@@ -759,8 +780,8 @@ def add_abi_method_call_with_exception(
 def add_abi_method_call(context, account_type, operation):
     abi_method_adder(
         context,
-        account_type,
-        operation,
+        account_type=account_type,
+        operation=operation,
     )
 
 
@@ -781,16 +802,16 @@ def add_abi_method_call_creation_with_allocs(
 ):
     abi_method_adder(
         context,
-        account_type,
-        operation,
-        True,
-        approval_program_path,
-        clear_program_path,
-        global_bytes,
-        global_ints,
-        local_bytes,
-        local_ints,
-        extra_pages,
+        account_type=account_type,
+        operation=operation,
+        create_when_calling=True,
+        approval_program_path=approval_program_path,
+        clear_program_path=clear_program_path,
+        global_bytes=global_bytes,
+        global_ints=global_ints,
+        local_bytes=local_bytes,
+        local_ints=local_ints,
+        extra_pages=extra_pages,
     )
 
 
@@ -806,11 +827,11 @@ def add_abi_method_call_creation(
 ):
     abi_method_adder(
         context,
-        account_type,
-        operation,
-        True,
-        approval_program_path,
-        clear_program_path,
+        account_type=account_type,
+        operation=operation,
+        create_when_calling=True,
+        approval_program_path=approval_program_path,
+        clear_program_path=clear_program_path,
     )
 
 
@@ -820,8 +841,8 @@ def add_abi_method_call_creation(
 def add_abi_method_call_nonced(context, account_type, operation):
     abi_method_adder(
         context,
-        account_type,
-        operation,
+        account_type=account_type,
+        operation=operation,
         force_unique_transactions=True,
     )
 
@@ -1222,7 +1243,10 @@ def check_all_boxes(context, from_client: str, box_names: str = None):
             base64.b64decode(box_encoded)
             for box_encoded in box_names.split(":")
         ]
+    expected_num_boxes = len(expected_box_names)
+
     if from_client == "algod":
+        advance_chain_wait_for_box(context, expected_num_boxes)
         box_response = context.app_acl.application_boxes(
             context.current_application_id
         )
@@ -1244,6 +1268,74 @@ def check_all_boxes(context, from_client: str, box_names: str = None):
     assert set(expected_box_names) == set(
         actual_box_names
     ), f"Expected box names array does not match actual array {expected_box_names} != {actual_box_names}"
+
+
+def advance_chain_wait_for_box(
+    context,
+    expected_num_boxes: int,
+    wait_rounds: int = 5,
+    max_attempts: int = 50,
+):
+    """
+    Advance the blockchain and wait for application boxes to persist in Algod.
+
+    Args:
+        context: Behave context containing necessary information like app_acl, current_application_id, sender, etc.
+        wait_rounds (int): The number of rounds to wait for persistence.
+        max_attempts (int): Maximum number of attempts to check for persistence.
+
+    Raises:
+        Exception: If the boxes do not persist within the specified number of attempts.
+    """
+    algod_client = context.app_acl
+    app_id = context.current_application_id
+    sender = context.transient_pk
+    sender_private_key = context.transient_sk
+
+    # Get the current round
+    status = algod_client.status()
+    current_round = status.get("last-round", 0)
+    target_round = current_round + wait_rounds
+
+    attempts = 0
+    while attempts < max_attempts:
+        # Submit a 0-pay transaction to advance the blockchain state
+        params = algod_client.suggested_params()
+        txn = transaction.PaymentTxn(
+            sender,
+            params,
+            sender,
+            0,
+            note=b"Advance round for box persistence",
+        )
+        signed_txn = txn.sign(sender_private_key)
+        tx_id = algod_client.send_transaction(signed_txn)
+
+        # Wait for transaction confirmation
+        transaction.wait_for_confirmation(algod_client, tx_id, 1)
+
+        # Wait for a second before checking again
+        time.sleep(1)
+        attempts += 1
+
+        # Get the latest status
+        status = algod_client.status()
+        current_round = status.get("last-round", 0)
+
+        if current_round >= target_round:
+            # Check if boxes are available
+            try:
+                box_response = algod_client.application_boxes(app_id)
+                actual_num_boxes = len(box_response.get("boxes", []))
+
+                if actual_num_boxes == expected_num_boxes:
+                    return  # Exit once the condition is met
+            except Exception as e:
+                print(f"Error retrieving boxes: {e}")
+
+    raise Exception(
+        f"Timeout waiting for boxes to persist for application {app_id}. Current round: {current_round}"
+    )
 
 
 @then(

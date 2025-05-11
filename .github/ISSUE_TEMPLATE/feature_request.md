@@ -2,8 +2,9 @@
 name: "\U0001F514 Feature Request"
 about: Suggestions for how we can improve the algorand platform.
 title: ''
-labels: new-feature-request
+labels: ''
 assignees: ''
+
 ---
 
 ## Problem

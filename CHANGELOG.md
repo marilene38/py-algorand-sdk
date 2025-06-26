@@ -1,5 +1,70 @@
 # Changelog
 
+# v2.8.0
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.8.0 -->
+
+## What's Changed
+### Enhancements
+* Blockheaders: Support for blockheaders call against Indexer API. by @gmalouf in https://github.com/algorand/py-algorand-sdk/pull/553
+* API: Support for header-only flag on /v2/block algod endpoint. by @gmalouf in https://github.com/algorand/py-algorand-sdk/pull/557
+
+## New Contributors
+* @dependabot made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/535
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.7.0...v2.8.0
+
+# v2.7.0
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.7.0 -->
+
+## What's Changed
+### Enhancements
+* Python: Remove 3.8 and 3.9 Support, Bump Runner Dependencies to Stabilize Build by @gmalouf in https://github.com/algorand/py-algorand-sdk/pull/550
+* Incentives: Heartbeat Transaction Support by @gmalouf in https://github.com/algorand/py-algorand-sdk/pull/548
+
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.6.1...v2.7.0
+
+# v2.6.1
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.6.1 -->
+
+## What's Changed
+### Bugfixes
+* algod: Even in the face of urllib.error.HTTPError, return the json by @jannotti in https://github.com/algorand/py-algorand-sdk/pull/529
+* Fix: Pass args to underlying `kmd_request` function, including timeout by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/545
+
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.6.0...v2.6.1
+
+# v2.6.0
+
+<!-- Release notes generated using configuration in .github/release.yml at release/v2.6.0 -->
+
+## What's Changed
+### Bugfixes
+* fix: no timeout for urlopen issue #526 by @grzracz in https://github.com/algorand/py-algorand-sdk/pull/527
+* txns: Uses sp.min_fee if available by @jannotti in https://github.com/algorand/py-algorand-sdk/pull/530
+* fix: Fix initialization for `WrongAmountType` error by @algolog in https://github.com/algorand/py-algorand-sdk/pull/532
+* Fix: Fix indexer sync issue in cucumber tests by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/533
+### Enhancements
+* Docs: Add missing pages for source map and dryrun results by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/520
+* DX: Keyreg bytes by @jannotti in https://github.com/algorand/py-algorand-sdk/pull/522
+* Testing: Add Python 3.12 to test matrix by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/534
+* Simulate: Support newer simulate options by @jasonpaulos in https://github.com/algorand/py-algorand-sdk/pull/537
+* Tests: Enable min-balance Cucumber tests. by @gmalouf in https://github.com/algorand/py-algorand-sdk/pull/539
+### Other
+* Fix typographic error when printing offline participation transaction by @hsoerensen in https://github.com/algorand/py-algorand-sdk/pull/524
+
+## New Contributors
+* @hsoerensen made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/524
+* @grzracz made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/527
+* @algolog made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/532
+* @gmalouf made their first contribution in https://github.com/algorand/py-algorand-sdk/pull/539
+
+**Full Changelog**: https://github.com/algorand/py-algorand-sdk/compare/v2.5.0...v2.6.0
+
 # v2.5.0
 
 <!-- Release notes generated using configuration in .github/release.yml at release/v2.5.0 -->

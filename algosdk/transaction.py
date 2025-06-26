@@ -189,7 +189,8 @@ class Transaction:
             d["fv"] = self.first_valid_round
         if self.genesis_id:
             d["gen"] = self.genesis_id
-        d["gh"] = base64.b64decode(self.genesis_hash)
+        if self.genesis_hash:
+            d["gh"] = base64.b64decode(self.genesis_hash)
         if self.group:
             d["grp"] = self.group
         d["lv"] = self.last_valid_round
@@ -210,7 +211,7 @@ class Transaction:
             d["fee"] if "fee" in d else 0,
             d["fv"] if "fv" in d else 0,
             d["lv"],
-            base64.b64encode(d["gh"]).decode(),
+            base64.b64encode(d["gh"]).decode() if "gh" in d else None,
             d["gen"] if "gen" in d else None,
             flat_fee=True,
         )
@@ -219,9 +220,9 @@ class Transaction:
             "sender": encoding.encode_address(d["snd"]),
             "note": d["note"] if "note" in d else None,
             "lease": d["lx"] if "lx" in d else None,
-            "rekey_to": encoding.encode_address(d["rekey"])
-            if "rekey" in d
-            else None,
+            "rekey_to": (
+                encoding.encode_address(d["rekey"]) if "rekey" in d else None
+            ),
         }
         txn_type = d["type"]
         if not isinstance(d["type"], str):
@@ -263,6 +264,9 @@ class Transaction:
             args.pop("note"), args.pop("rekey_to"), args.pop("lease")
             args.update(StateProofTxn._undictify(d))
             txn = StateProofTxn(**args)
+        elif txn_type == constants.heartbeat_txn:
+            args.update(HeartbeatTxn._undictify(d))
+            txn = HeartbeatTxn(**args)
         if "grp" in d:
             txn.group = d["grp"]
         return txn
@@ -390,13 +394,15 @@ class PaymentTxn(Transaction):
     @staticmethod
     def _undictify(d):
         args = {
-            "close_remainder_to": encoding.encode_address(d["close"])
-            if "close" in d
-            else None,
+            "close_remainder_to": (
+                encoding.encode_address(d["close"]) if "close" in d else None
+            ),
             "amt": d["amt"] if "amt" in d else 0,
-            "receiver": encoding.encode_address(d["rcv"])
-            if "rcv" in d
-            else constants.ZERO_ADDRESS,
+            "receiver": (
+                encoding.encode_address(d["rcv"])
+                if "rcv" in d
+                else constants.ZERO_ADDRESS
+            ),
         }
         return args
 
@@ -1165,7 +1171,6 @@ class AssetUpdateTxn(AssetConfigTxn):
 
 
 class AssetFreezeTxn(Transaction):
-
     """
     Represents a transaction for freezing or unfreezing an account's asset
     holdings. Must be issued by the asset's freeze manager.
@@ -1363,17 +1368,19 @@ class AssetTransferTxn(Transaction):
     @staticmethod
     def _undictify(d):
         args = {
-            "receiver": encoding.encode_address(d["arcv"])
-            if "arcv" in d
-            else constants.ZERO_ADDRESS,
+            "receiver": (
+                encoding.encode_address(d["arcv"])
+                if "arcv" in d
+                else constants.ZERO_ADDRESS
+            ),
             "amt": d["aamt"] if "aamt" in d else 0,
             "index": d["xaid"] if "xaid" in d else None,
-            "close_assets_to": encoding.encode_address(d["aclose"])
-            if "aclose" in d
-            else None,
-            "revocation_target": encoding.encode_address(d["asnd"])
-            if "asnd" in d
-            else None,
+            "close_assets_to": (
+                encoding.encode_address(d["aclose"]) if "aclose" in d else None
+            ),
+            "revocation_target": (
+                encoding.encode_address(d["asnd"]) if "asnd" in d else None
+            ),
         }
 
         return args
@@ -1681,12 +1688,12 @@ class ApplicationCallTxn(Transaction):
         args = {
             "index": d["apid"] if "apid" in d else None,
             "on_complete": d["apan"] if "apan" in d else None,
-            "local_schema": StateSchema.undictify(d["apls"])
-            if "apls" in d
-            else None,
-            "global_schema": StateSchema.undictify(d["apgs"])
-            if "apgs" in d
-            else None,
+            "local_schema": (
+                StateSchema.undictify(d["apls"]) if "apls" in d else None
+            ),
+            "global_schema": (
+                StateSchema.undictify(d["apgs"]) if "apgs" in d else None
+            ),
             "approval_program": d["apap"] if "apap" in d else None,
             "clear_program": d["apsu"] if "apsu" in d else None,
             "app_args": d["apaa"] if "apaa" in d else None,
@@ -1694,9 +1701,11 @@ class ApplicationCallTxn(Transaction):
             "foreign_apps": d["apfa"] if "apfa" in d else None,
             "foreign_assets": d["apas"] if "apas" in d else None,
             "extra_pages": d["apep"] if "apep" in d else 0,
-            "boxes": [BoxReference.undictify(box) for box in d["apbx"]]
-            if "apbx" in d
-            else None,
+            "boxes": (
+                [BoxReference.undictify(box) for box in d["apbx"]]
+                if "apbx" in d
+                else None
+            ),
         }
         if args["accounts"]:
             args["accounts"] = [
@@ -2299,9 +2308,9 @@ class MultisigTransaction:
                 for s in range(len(stx.multisig.subsigs)):
                     if stx.multisig.subsigs[s].signature:
                         if not msigstx.multisig.subsigs[s].signature:
-                            msigstx.multisig.subsigs[
-                                s
-                            ].signature = stx.multisig.subsigs[s].signature
+                            msigstx.multisig.subsigs[s].signature = (
+                                stx.multisig.subsigs[s].signature
+                            )
                         elif (
                             not msigstx.multisig.subsigs[s].signature
                             == stx.multisig.subsigs[s].signature
@@ -3005,6 +3014,114 @@ class StateProofTxn(Transaction):
             and self.sprf_type == other.sprf_type
             and self.sprf == other.sprf
             and self.sprfmsg == other.sprfmsg
+        )
+
+        return False
+
+
+class HeartbeatTxn(Transaction):
+    """
+    Represents a heartbeat transaction
+
+    Arguments:
+        sender (str): address of the sender (note that sender may be different from heartbeat_address)
+        sp (SuggestedParams): suggested params from algod
+        heartbeat_address (str, optional): account this txn is proving onlineness for
+        heartbeat_proof (dict(), optional): signature using heartbeat_address's partkey
+        heartbeat_seed (bytes, optional): the block seed for this transaction's firstValid block
+        heartbeat_vote_id (bytes, optional): must match the heartbeat_address's current vote id
+        heartbeat_key_dilution (int, optional): must match heartbeat_address's current key dilution
+        note (bytes, optional): arbitrary optional bytes
+        lease (byte[32], optional): specifies a lease, and no other transaction
+            with the same sender and lease can be confirmed in this
+            transaction's valid rounds
+        rekey_to (str, optional): additionally rekey the sender to this address
+
+
+    Attributes:
+        sender (str)
+        hb_address (str)
+        hb_proof (dict())
+        hb_seed (str)
+        hb_vote_id (str)
+        hb_key_dilution (str)
+        first_valid_round (int)
+        last_valid_round (int)
+        genesis_id (str)
+        genesis_hash (str)
+        type (str)
+    """
+
+    def __init__(
+        self,
+        sender,
+        sp,
+        heartbeat_address=None,
+        heartbeat_proof=None,
+        heartbeat_seed=None,
+        heartbeat_vote_id=None,
+        heartbeat_key_dilution=None,
+        note=None,
+        lease=None,
+        rekey_to=None,
+    ):
+        Transaction.__init__(
+            self, sender, sp, note, lease, constants.heartbeat_txn, rekey_to
+        )
+
+        self.hb_address = heartbeat_address
+        self.hb_proof = heartbeat_proof
+        self.hb_seed = heartbeat_seed
+        self.hb_vote_id = heartbeat_vote_id
+        self.hb_key_dilution = heartbeat_key_dilution
+
+    def dictify(self):
+        d = dict()
+        if self.hb_address:
+            d["a"] = encoding.decode_address(self.hb_address)
+        if self.hb_proof:
+            d["prf"] = self.hb_proof
+        if self.hb_seed:
+            d["sd"] = self.hb_seed
+        if self.hb_vote_id:
+            d["vid"] = self.hb_vote_id
+        if self.hb_key_dilution:
+            d["kd"] = self.hb_key_dilution
+
+        # Heartbeat Transaction fields are under an 'hb' key, unlike other unnested transaction types
+        pd = {"hb": OrderedDict(sorted(d.items()))}
+
+        pd.update(super(HeartbeatTxn, self).dictify())
+        od = OrderedDict(sorted(pd.items()))
+
+        return od
+
+    @staticmethod
+    def _undictify(d):
+        args = {}
+        if "a" in d["hb"]:
+            args["heartbeat_address"] = encoding.encode_address(d["hb"]["a"])
+        if "prf" in d["hb"]:
+            args["heartbeat_proof"] = d["hb"]["prf"]
+        if "sd" in d["hb"]:
+            args["heartbeat_seed"] = d["hb"]["sd"]
+        if "vid" in d["hb"]:
+            args["heartbeat_vote_id"] = d["hb"]["vid"]
+        if "kd" in d["hb"]:
+            args["heartbeat_key_dilution"] = d["hb"]["kd"]
+
+        return args
+
+    def __eq__(self, other):
+        if not isinstance(other, HeartbeatTxn):
+            return False
+        return (
+            super(HeartbeatTxn, self).__eq__(other)
+            and self.hb_address == other.hb_address
+            and self.hb_proof == other.hb_proof
+            and self.hb_seed == other.hb_seed
+            and self.hb_vote_id == other.hb_vote_id
+            and self.hb_key_dilution == other.hb_key_dilution
         )
 
         return False
